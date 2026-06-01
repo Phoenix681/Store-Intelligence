@@ -4,6 +4,7 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 // Import routers
+const db = require('./database');
 const ingestionRouter = require('./ingestion');
 const metricsRouter = require('./metrics');
 const funnelRouter = require('./funnel');

@@ -3,7 +3,7 @@ const path = require('path');
 
 // Store the database in the root of the project
 const dbPath = path.resolve(__dirname, '../store_intel.db');
-const db = new Database(dbPath, { verbose: console.log }); // Remove verbose in production
+const db = new Database(dbPath); 
 
 // Initialize the schema
 const initDB = () => {

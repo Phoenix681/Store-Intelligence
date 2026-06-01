@@ -8,7 +8,7 @@
   },
   "scripts": {
     "start": "node app/main.js",
-    "test": "node tests/api.test.js"
+    "test": "node tests/api.test.js && node tests/test_ingest.js && node tests/edge_cases.test.js"
   },
   "keywords": [],
   "author": "",

@@ -1,3 +1,7 @@
+/* # PROMPT: "Write a Node.js test script to verify the /events/ingest endpoint. It should test a batch of 500 events and ensure idempotency (sending the same events twice doesn't duplicate them in the database)."
+# CHANGES MADE: I updated the payload structure to match my specific YOLOv8 output schema, ensuring the metadata and is_staff boolean fields were properly formatted for SQLite insertion.
+*/
+
 const { v4: uuidv4 } = require('uuid');
 
 const STORE_ID = "STORE_BLR_002";
