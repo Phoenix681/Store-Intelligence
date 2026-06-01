@@ -1,0 +1,7 @@
+node_modules
+npm-debug.log
+.git
+store_intel.db
+store_intel.db-journal
+venv
+__pycache__
