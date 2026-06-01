@@ -44,12 +44,16 @@ router.get('/', (req, res) => {
             currentQueue = meta.queue_depth || 0;
         }
 
+        const totalJoins = db.prepare(`SELECT COUNT(*) as count FROM events WHERE store_id = ? AND event_type = 'BILLING_QUEUE_JOIN'`).get(storeId).count;
+        const totalAbandons = db.prepare(`SELECT COUNT(*) as count FROM events WHERE store_id = ? AND event_type = 'BILLING_QUEUE_ABANDON'`).get(storeId).count;
+        const abandonmentRate = totalJoins > 0 ? parseFloat(((totalAbandons / totalJoins) * 100).toFixed(2)) : 0;
+
         res.json({
             store_id: storeId,
             unique_visitors: walkIns,
             conversion_rate: parseFloat(conversionRate),
             current_queue_depth: currentQueue,
-            abandonment_rate: 0 // Mocked for now to save time
+            abandonment_rate: abandonmentRate 
         });
 
     } catch (err) {

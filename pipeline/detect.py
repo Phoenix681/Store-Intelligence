@@ -46,7 +46,7 @@ def create_event_payload(visitor_id, event_type, zone_id=None, dwell_time=0, is_
         "is_staff": bool(is_staff), 
         "confidence": float(confidence),
         "metadata": {
-            "queue_depth": 1 if event_type == "BILLING_QUEUE_JOIN" else None,
+            "queue_depth": sum(1 for s in visitor_sessions.values() if s.get("current_zone") == "BILLING_QUEUE" and s.get("status") == "ACTIVE") if event_type == "BILLING_QUEUE_JOIN" else None,
             "sku_zone": zone_id,
             "session_seq": int(seq)
         }

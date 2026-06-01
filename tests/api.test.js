@@ -1,5 +1,5 @@
 /* # PROMPT: "Write a zero-dependency Node.js integration test using the native 'http' and 'assert' modules to test my Express /funnel endpoint. It must verify a 200 status code and check that the JSON response contains funnel_metrics."
-# CHANGES MADE: I manually added the assertions for checking the successful_purchases metric and updated the API path to use the dynamic store ID ST1008 to match my offline POS dataset.
+# CHANGES MADE: I manually added the assertions for checking the successful_purchases metric and updated the API path to use the dynamic store ID STORE_BLR_002 to match the updated detection pipeline.
 */
 
 const http = require('http');
@@ -10,7 +10,7 @@ console.log("🧪 Starting API Integration Tests...");
 const options = {
     hostname: 'localhost',
     port: 3000,
-    path: '/stores/ST1008/funnel',
+    path: '/stores/STORE_BLR_002/funnel', // <-- FIXED STORE ID
     method: 'GET'
 };
 
@@ -35,12 +35,13 @@ const req = http.request(options, (res) => {
         try {
             const response = JSON.parse(data);
             
-            assert.ok(response.store_id === 'ST1008', "Store ID should match ST1008");
+            assert.ok(response.store_id === 'STORE_BLR_002', "Store ID should match STORE_BLR_002"); // <-- FIXED ASSERTION
             console.log("✅ PASS: Store ID correctly mapped");
 
             assert.ok(response.funnel_metrics, "Response must contain funnel_metrics object");
             console.log("✅ PASS: Funnel metrics object exists");
 
+            // Verify that the POS merge is returning a valid number
             assert.ok(response.funnel_metrics.successful_purchases >= 0, "Purchases must be a valid number");
             console.log("✅ PASS: POS offline data successfully merged");
 
