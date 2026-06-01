@@ -57,7 +57,7 @@ def send_to_api(event):
     try:
         response = requests.post(API_URL, json=[event], timeout=2)
         if response.status_code in [200, 207]:
-            pass # Keep terminal clean, we will print major transitions manually
+            pass
     except requests.exceptions.RequestException:
         print("❌ API ERROR: Could not connect to Node server.")
 

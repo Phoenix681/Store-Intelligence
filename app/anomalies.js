@@ -45,7 +45,7 @@ router.get('/', (req, res) => {
             });
         }
 
-        // 3. Billing Queue Spike Anomaly (From your screenshot)
+        // 3. Billing Queue Spike Anomaly 
         const latestQueueEvent = db.prepare(`
             SELECT metadata FROM events 
             WHERE store_id = ? AND event_type = 'BILLING_QUEUE_JOIN' 
@@ -64,8 +64,7 @@ router.get('/', (req, res) => {
             }
         }
 
-        // 4. Conversion Drop Anomaly (From your screenshot)
-        // Simulating a drop against a hypothetical 7-day average
+        // 4. Conversion Drop Anomaly 
         const totalWalkIns = db.prepare(`
             SELECT COUNT(DISTINCT visitor_id) as count 
             FROM events 

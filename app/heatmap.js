@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router({ mergeParams: true });
-const db = require('./database'); // FIX: Using the shared DB instance
+const db = require('./database');
 
 router.get('/', (req, res) => {
     const storeId = req.params.id;
@@ -31,7 +31,7 @@ router.get('/', (req, res) => {
 
         res.json({
             store_id: storeId,
-            data_confidence: sessionCount >= 20, // FIX: Evaluates to true/false based on 20+ sessions
+            data_confidence: sessionCount >= 20,
             heatmap_data: normalizedData
         });
     } catch (error) {

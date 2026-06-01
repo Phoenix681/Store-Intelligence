@@ -11,11 +11,10 @@ def click_event(event, x, y, flags, params):
         current_polygon.append([x, y])
         print(f"[{x}, {y}],")
         
-        # Draw a small red dot where you clicked so you can see it
         cv2.circle(img, (x, y), 5, (0, 0, 255), -1)
         cv2.imshow('Zone Calibration', img)
 
-# Load your video
+# Load video
 cap = cv2.VideoCapture('pipeline/test_video1.mp4')
 success, img = cap.read()
 
@@ -23,7 +22,7 @@ if not success:
     print("❌ Could not load video frame.")
 else:
     print("🎯 Click the corners of a zone on the image. Press 'q' to quit.")
-    # Resize to match our tracking script display size
+
     img = cv2.resize(img, (1024, 576))
     
     cv2.imshow('Zone Calibration', img)

@@ -52,7 +52,7 @@ async function runTest() {
     console.log(`🚀 Sending batch of ${events.length} events to API...`);
 
     try {
-        // Node 18+ has native fetch. If using an older version, you'd need axios.
+        
         const response = await fetch('http://localhost:3000/events/ingest', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },

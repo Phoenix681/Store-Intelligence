@@ -10,7 +10,7 @@ console.log("🧪 Starting API Integration Tests...");
 const options = {
     hostname: 'localhost',
     port: 3000,
-    path: '/stores/STORE_BLR_002/funnel', // <-- FIXED STORE ID
+    path: '/stores/STORE_BLR_002/funnel', 
     method: 'GET'
 };
 
@@ -35,7 +35,7 @@ const req = http.request(options, (res) => {
         try {
             const response = JSON.parse(data);
             
-            assert.ok(response.store_id === 'STORE_BLR_002', "Store ID should match STORE_BLR_002"); // <-- FIXED ASSERTION
+            assert.ok(response.store_id === 'STORE_BLR_002', "Store ID should match STORE_BLR_002");
             console.log("✅ PASS: Store ID correctly mapped");
 
             assert.ok(response.funnel_metrics, "Response must contain funnel_metrics object");

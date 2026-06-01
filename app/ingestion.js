@@ -2,9 +2,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('./database');
 
-// Prepare the insert statement once for performance
-// "INSERT OR IGNORE" handles our Idempotency requirement perfectly. 
-// If the event_id exists, it skips it without throwing an error.
+
 const insertEvent = db.prepare(`
     INSERT OR IGNORE INTO events (
         event_id, store_id, camera_id, visitor_id, event_type, 
@@ -30,7 +28,6 @@ router.post('/ingest', (req, res) => {
     let failed = 0;
     const errors = [];
 
-    // SQLite transactions make mass inserts extremely fast and safe
     const insertMany = db.transaction((eventsArray) => {
         for (const evt of eventsArray) {
             try {
@@ -63,7 +60,6 @@ router.post('/ingest', (req, res) => {
 
     insertMany(events);
 
-    // Structured response as requested by the challenge
     res.status(failed > 0 ? 207 : 200).json({
         message: "Batch processed",
         total_received: events.length,

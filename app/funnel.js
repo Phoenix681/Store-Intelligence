@@ -1,11 +1,10 @@
 const express = require('express');
 const router = express.Router({ mergeParams: true });
-const db = require('./database'); // FIX: Using the shared DB instance
+const db = require('./database');
 
 router.get('/', (req, res) => {
     const storeId = req.params.id;
     try {
-        // FIX: Added 'AND is_staff = 0' to ensure staff don't inflate funnel metrics
         const walkIns = db.prepare(`SELECT COUNT(DISTINCT visitor_id) as count FROM events WHERE store_id = ? AND is_staff = 0 AND event_type IN ('ENTRY', 'ZONE_ENTER')`).get(storeId).count;
         
         const zoneVisits = db.prepare(`SELECT COUNT(DISTINCT visitor_id) as count FROM events WHERE store_id = ? AND is_staff = 0 AND zone_id IS NOT NULL`).get(storeId).count;
@@ -40,7 +39,6 @@ router.get('/', (req, res) => {
             }
         });
     } catch (error) {
-        // FIX: Graceful 503 DB unavailable handling
         res.status(503).json({ error: "Service Unavailable", details: "Database connection failed or table missing" });
     }
 });

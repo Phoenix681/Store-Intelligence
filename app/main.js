@@ -65,7 +65,7 @@ app.get('/health', (req, res) => {
 
         if (lastTimestamp) {
             const eventTime = new Date(lastTimestamp).getTime();
-            const now = new Date().getTime(); // Note: adjust to match your simulated time if necessary
+            const now = new Date().getTime();
             // If the last event was more than 10 minutes (600000 ms) ago
             if ((now - eventTime) > 600000) {
                 status = "STALE_FEED";
