@@ -15,7 +15,15 @@ router.get('/', (req, res) => {
         // 2. Calculate Total Purchases (from the CSV you imported)
         let purchases = 0;
         try {
-            purchases = db.prepare(`SELECT COUNT(DISTINCT invoice_number) as total FROM pos_transactions WHERE store_id = ?`).get(storeId).total;
+            purchases = db.prepare(`
+                SELECT COUNT(DISTINCT p.invoice_number) as total 
+                FROM pos_transactions p
+                JOIN events e ON p.store_id = e.store_id
+                WHERE p.store_id = ? 
+                  AND e.event_type = 'BILLING_QUEUE_JOIN' 
+                  AND e.is_staff = 0
+                  AND (strftime('%s', p.order_date) - strftime('%s', e.timestamp)) BETWEEN 0 AND 300
+            `).get(storeId).total;
         } catch (err) {
             console.warn("POS table missing or empty, defaulting purchases to 0");
         }

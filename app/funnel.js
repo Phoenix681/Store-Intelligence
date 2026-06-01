@@ -14,7 +14,15 @@ router.get('/', (req, res) => {
 
         let purchases = 0;
         try {
-            purchases = db.prepare(`SELECT COUNT(DISTINCT invoice_number) as count FROM pos_transactions WHERE store_id = ?`).get(storeId).count;
+            purchases = db.prepare(`
+                SELECT COUNT(DISTINCT p.invoice_number) as count 
+                FROM pos_transactions p
+                JOIN events e ON p.store_id = e.store_id
+                WHERE p.store_id = ? 
+                  AND e.event_type = 'BILLING_QUEUE_JOIN' 
+                  AND e.is_staff = 0
+                  AND (strftime('%s', p.order_date) - strftime('%s', e.timestamp)) BETWEEN 0 AND 300
+            `).get(storeId).count;
         } catch(e) {}
 
         res.json({
