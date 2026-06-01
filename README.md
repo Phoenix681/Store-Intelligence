@@ -8,7 +8,7 @@ To deploy the Intelligence API and start the tracking pipeline:
 1. `docker compose up --build -d`
 2. `npm run test` *(Optional: Runs integration tests to verify API health)*
 3. `cd pipeline`
-4. `source venv/Scripts/activate` *(Or activate your local Python environment)*
+4. Activate environment: `source venv/bin/activate` (Mac/Linux) or `venv\Scripts\activate` (Windows).
 5. `python detect.py`
 
 ## 🎥 Running the Detection Pipeline

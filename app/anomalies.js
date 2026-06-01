@@ -28,13 +28,13 @@ router.get('/', (req, res) => {
         // Checking for zones with 0 traffic in the last 30 minutes
         const thirtyMinsAgo = new Date(Date.now() - 30 * 60000).toISOString();
         const deadZone = db.prepare(`
-            SELECT zone_id 
-            FROM events 
-            WHERE store_id = ? AND timestamp > ? AND event_type IN ('ZONE_ENTER', 'ZONE_DWELL')
-            GROUP BY zone_id 
-            HAVING COUNT(visitor_id) = 0
+            SELECT DISTINCT zone_id FROM events WHERE store_id = ? 
+            AND zone_id NOT IN (
+                SELECT DISTINCT zone_id FROM events 
+                WHERE store_id = ? AND timestamp > ? AND event_type IN ('ZONE_ENTER', 'ZONE_DWELL')
+            )
             LIMIT 1
-        `).get(storeId, thirtyMinsAgo);
+        `).get(storeId, storeId, thirtyMinsAgo);
 
         if (deadZone) {
             anomalies.push({

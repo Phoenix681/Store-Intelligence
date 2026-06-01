@@ -17,34 +17,24 @@ app.use(express.json({ limit: '10mb' }));
 // --- STRUCTURED LOGGING MIDDLEWARE ---
 app.use((req, res, next) => {
     const start = Date.now();
-    const traceId = crypto.randomUUID();
-    
-    // Extract store_id from URL if it exists (e.g., /stores/STORE_BLR_002/...)
-    const storeIdMatch = req.originalUrl.match(/\/stores\/([^\/]+)/);
-    const storeId = storeIdMatch ? storeIdMatch[1] : "N/A";
-    
-    // Calculate event count for the ingest endpoint
-    const eventCount = (req.originalUrl === '/events/ingest' && Array.isArray(req.body)) 
-        ? req.body.length 
-        : 0;
-
-    // Hook into the response 'finish' event to calculate latency
     res.on('finish', () => {
-        const latencyMs = Date.now() - start;
+        const latency = Date.now() - start;
+        let eventCount = 0;
         
-        const logEntry = {
-            trace_id: traceId,
-            store_id: storeId,
-            endpoint: req.method + " " + req.originalUrl,
-            latency_ms: latencyMs,
-            event_count: eventCount,
-            status_code: res.statusCode
-        };
-        
-        // Output as a pure JSON string so log aggregators can parse it
-        console.log(JSON.stringify(logEntry));
-    });
+        // Safely count events only after body is fully parsed
+        if (req.originalUrl === '/events/ingest' && Array.isArray(req.body)) {
+            eventCount = req.body.length;
+        }
 
+        console.log(JSON.stringify({
+            timestamp: new Date().toISOString(),
+            method: req.method,
+            endpoint: req.originalUrl,
+            status: res.statusCode,
+            latency_ms: latency,
+            event_count: eventCount
+        }));
+    });
     next();
 });
 
