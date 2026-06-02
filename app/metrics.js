@@ -48,12 +48,21 @@ router.get('/', (req, res) => {
         const totalAbandons = db.prepare(`SELECT COUNT(*) as count FROM events WHERE store_id = ? AND event_type = 'BILLING_QUEUE_ABANDON'`).get(storeId).count;
         const abandonmentRate = totalJoins > 0 ? parseFloat(((totalAbandons / totalJoins) * 100).toFixed(2)) : 0;
 
+        // 5. Calculate Average Dwell per Zone
+        const avgDwellByZone = db.prepare(`
+            SELECT zone_id, AVG(dwell_ms) as avg_dwell
+            FROM events 
+            WHERE store_id = ? AND is_staff = 0 AND event_type = 'ZONE_DWELL'
+            GROUP BY zone_id
+        `).all(storeId);
+
         res.json({
             store_id: storeId,
             unique_visitors: walkIns,
             conversion_rate: parseFloat(conversionRate),
             current_queue_depth: currentQueue,
-            abandonment_rate: abandonmentRate 
+            abandonment_rate: abandonmentRate, 
+            avg_dwell_by_zone: avgDwellByZone
         });
 
     } catch (err) {

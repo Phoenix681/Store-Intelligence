@@ -30,6 +30,8 @@ router.post('/ingest', (req, res) => {
 
     const insertMany = db.transaction((eventsArray) => {
         for (const evt of eventsArray) {
+            // TRY/CATCH INSIDE TRANSACTION: Deliberately catching errors per-event 
+            // so a single malformed payload doesn't roll back the entire batch (Partial Success requirement).
             try {
                 // Basic validation for required fields
                 if (!evt.event_id || !evt.store_id || !evt.event_type || !evt.timestamp) {

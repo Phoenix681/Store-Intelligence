@@ -17,16 +17,23 @@ app.use(express.json({ limit: '10mb' }));
 // --- STRUCTURED LOGGING MIDDLEWARE ---
 app.use((req, res, next) => {
     const start = Date.now();
+    const traceId = crypto.randomUUID();
+    
+    // Extract store_id from URL or Ingest Body
+    let storeId = "UNKNOWN";
+    if (req.originalUrl.includes('/stores/')) {
+        storeId = req.originalUrl.split('/')[2];
+    } else if (req.originalUrl === '/events/ingest' && Array.isArray(req.body) && req.body[0]) {
+        storeId = req.body[0].store_id;
+    }
+
     res.on('finish', () => {
         const latency = Date.now() - start;
-        let eventCount = 0;
-        
-        // Safely count events only after body is fully parsed
-        if (req.originalUrl === '/events/ingest' && Array.isArray(req.body)) {
-            eventCount = req.body.length;
-        }
+        let eventCount = (req.originalUrl === '/events/ingest' && Array.isArray(req.body)) ? req.body.length : 0;
 
         console.log(JSON.stringify({
+            trace_id: traceId,
+            store_id: storeId,
             timestamp: new Date().toISOString(),
             method: req.method,
             endpoint: req.originalUrl,
@@ -48,27 +55,32 @@ app.use('/stores/:id/anomalies', anomaliesRouter);
 // Basic Health Check
 app.get('/health', (req, res) => {
     try {
-        // Find the most recent event
-        const lastEvent = db.prepare(`SELECT timestamp FROM events ORDER BY timestamp DESC LIMIT 1`).get();
+        // Find the most recent event PER STORE
+        const lastEvents = db.prepare(`
+            SELECT store_id, MAX(timestamp) as last_event 
+            FROM events 
+            GROUP BY store_id
+        `).all();
+        
         let status = "OK";
-        let lastTimestamp = lastEvent ? lastEvent.timestamp : null;
+        const now = new Date().getTime();
 
-        if (lastTimestamp) {
-            const eventTime = new Date(lastTimestamp).getTime();
-            const now = new Date().getTime();
-            // If the last event was more than 10 minutes (600000 ms) ago
+        // Check if ANY store has a stale feed (no events in 10 minutes)
+        for (const store of lastEvents) {
+            const eventTime = new Date(store.last_event).getTime();
             if ((now - eventTime) > 600000) {
                 status = "STALE_FEED";
+                break; 
             }
         }
 
         res.json({
             status: status,
-            last_event_timestamp: lastTimestamp,
+            last_events_per_store: lastEvents,
             uptime_seconds: process.uptime()
         });
     } catch (err) {
-        res.status(500).json({ status: "ERROR", details: err.message });
+        res.status(503).json({ status: "ERROR", details: err.message });
     }
 });
 

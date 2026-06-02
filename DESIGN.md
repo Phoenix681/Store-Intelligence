@@ -9,7 +9,7 @@ The system is built as a lightweight, decoupled event-driven pipeline designed f
 1. **Frame Extraction:** Video is decoded and downsampled (1024x576) to reduce compute overhead while maintaining spatial awareness.
 2. **Detection & Tracking:** YOLOv8n combined with ByteTrack performs multi-object tracking (MOT), assigning persistent `track_id`s to visitors.
 3. **Spatial Mapping:** Customer foot-coordinates (bottom-center of bounding boxes) are mapped against predefined 2D floor polygons using `cv2.pointPolygonTest`.
-4. **State Machine:** A session dictionary tracks `current_zone` and `zone_entry_time`. Transitions trigger `ZONE_ENTER`, `ZONE_DWELL` (5s threshold), or `ZONE_EXIT` events.
+4. **State Machine & Queue Logic:** A state-cached dictionary tracks `current_zone` and `zone_entry_time`. Transitions trigger `ENTRY`, `REENTRY`, `ZONE_ENTER`, `ZONE_DWELL` (5s threshold), or `EXIT` events. Dedicated logic monitors the `BILLING_QUEUE` zone to emit `BILLING_QUEUE_JOIN` and dynamically calculates real-time `queue_depth` for anomaly detection.
 5. **Ingestion:** Events are POSTed to the Express `/events/ingest` API endpoint.
 6. **Persistence:** Events are saved to a local SQLite database (acting as our time-series/OLAP stand-in).
 7. **Aggregation:** The `/funnel` endpoint merges CV footfall data with offline POS transaction data (`pos_transactions.csv`) using a unified `store_id` to calculate the final conversion rate.
