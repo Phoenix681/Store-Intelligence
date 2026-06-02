@@ -8,12 +8,11 @@ import requests
 
 # The endpoint of your running Express API
 API_URL = "http://localhost:3000/events/ingest"
-STORE_ID = "STORE_BLR_002" # Standardized for the Acceptance Gate
+STORE_ID = "STORE_BLR_002"
 
 def format_zone(coords):
     return np.array(coords, np.int32).reshape((-1, 1, 2))
 
-# 1. Define Camera Zones (Mapped from floor plan to 2D pixel coordinates)
 STORE_ZONES = {
     "DERMADOC": format_zone([[553, 404], [602, 446], [674, 409], [638, 370]]),
     "MINIMALIST": format_zone([[641, 364], [696, 407], [747, 368], [725, 335]]),
@@ -29,7 +28,6 @@ STORE_ZONES = {
     "FOXTALE": format_zone([[810, 291], [826, 298], [843, 290], [829, 281]])
 }
 
-# 2. State management
 visitor_sessions = {}
 
 def create_event_payload(visitor_id, event_type, zone_id=None, dwell_time=0, is_staff=False, confidence=0.85, seq=1):
@@ -124,7 +122,6 @@ def run_tracker(video_path):
 
                 if session["is_staff"]:
                     cv2.putText(annotated_frame, "STAFF", (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
-                    # Emit one event occasionally to ensure schema compliance for staff handling
                     if int(time.time()) % 10 == 0: 
                         staff_event = create_event_payload(track_id, "ZONE_DWELL", "MAIN_FLOOR", is_staff=True, confidence=conf, seq=session["session_seq"])
                         send_to_api(staff_event)
@@ -190,6 +187,5 @@ def run_tracker(video_path):
     cv2.destroyAllWindows()
 
 if __name__ == "__main__":
-    # Uses os.path.join to prevent Windows/Linux path breaks
     video_path = os.path.join("pipeline", "test_video1.mp4")
     run_tracker(video_path)

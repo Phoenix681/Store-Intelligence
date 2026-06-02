@@ -6,7 +6,6 @@ const db = new Database('./store_intel.db');
 
 console.log("⏳ Initializing database tables...");
 
-// 1. Create the POS table
 db.exec(`
   CREATE TABLE IF NOT EXISTS pos_transactions (
     invoice_number TEXT,
@@ -15,7 +14,6 @@ db.exec(`
   )
 `);
 
-// 2. Prepare the high-speed insert statement
 const insertStmt = db.prepare('INSERT INTO pos_transactions (invoice_number, store_id, order_date) VALUES (?, ?, ?)');
 
 console.log("⏳ Reading pos_transactions.csv...");
@@ -31,7 +29,6 @@ try {
 
     let count = 0;
 
-    // 3. Insert using a SQLite Transaction (this makes it 100x faster)
     const insertMany = db.transaction((rows) => {
         for (let i = 1; i < rows.length; i++) {
             if (!rows[i].trim()) continue; 

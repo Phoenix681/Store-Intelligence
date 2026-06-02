@@ -3,7 +3,7 @@
 */
 
 const { v4: uuidv4 } = require('uuid');
-const assert = require('assert'); // <-- Added for strict CI/CD testing
+const assert = require('assert');
 
 const STORE_ID = "STORE_BLR_002";
 const CAMERAS = ["CAM_ENTRY_01", "CAM_FLOOR_01", "CAM_BILLING_01"];
@@ -11,7 +11,6 @@ const ZONES = ["SKINCARE", "MAKEUP", "HAIRCARE", "BILLING_QUEUE", null];
 const EVENT_TYPES = ["ENTRY", "EXIT", "ZONE_ENTER", "ZONE_EXIT", "ZONE_DWELL", "BILLING_QUEUE_JOIN", "BILLING_QUEUE_ABANDON", "REENTRY"];
 
 function generateMockEvent(index) {
-    // We group events by visitor to simulate real session flows
     const visitorGroup = Math.floor(index / 5); 
     
     return {
@@ -35,15 +34,12 @@ function generateMockEvent(index) {
 async function runTest() {
     const events = [];
     
-    // 1. Generate 100 perfectly valid events
     for (let i = 0; i < 100; i++) {
         events.push(generateMockEvent(i));
     }
 
-    // 2. Add an exact duplicate of the first event to test Idempotency (INSERT OR IGNORE)
     events.push(events[0]); 
 
-    // 3. Add a malformed event to test Partial Success (missing required fields)
     events.push({
         event_id: uuidv4(),
         event_type: "ZONE_ENTER" 

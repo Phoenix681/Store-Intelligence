@@ -5,14 +5,12 @@ const db = require('./database');
 router.get('/', (req, res) => {
     const storeId = req.params.id;
     try {
-        // 1. Calculate Total Unique Visitors (Excluding Staff)
         const walkIns = db.prepare(`
             SELECT COUNT(DISTINCT visitor_id) as total 
             FROM events 
             WHERE store_id = ? AND is_staff = 0 AND event_type IN ('ENTRY', 'ZONE_ENTER')
         `).get(storeId).total;
 
-        // 2. Calculate Total Purchases (from the CSV you imported)
         let purchases = 0;
         try {
             purchases = db.prepare(`
@@ -28,10 +26,8 @@ router.get('/', (req, res) => {
             console.warn("POS table missing or empty, defaulting purchases to 0");
         }
 
-        // 3. Calculate Real Conversion Rate
         const conversionRate = walkIns > 0 ? ((purchases / walkIns) * 100).toFixed(2) : 0;
 
-        // 4. Get Current Queue Depth
         const queueEvent = db.prepare(`
             SELECT metadata FROM events 
             WHERE store_id = ? AND event_type = 'BILLING_QUEUE_JOIN' 
@@ -48,7 +44,6 @@ router.get('/', (req, res) => {
         const totalAbandons = db.prepare(`SELECT COUNT(*) as count FROM events WHERE store_id = ? AND event_type = 'BILLING_QUEUE_ABANDON'`).get(storeId).count;
         const abandonmentRate = totalJoins > 0 ? parseFloat(((totalAbandons / totalJoins) * 100).toFixed(2)) : 0;
 
-        // 5. Calculate Average Dwell per Zone
         const avgDwellByZone = db.prepare(`
             SELECT zone_id, AVG(dwell_ms) as avg_dwell
             FROM events 

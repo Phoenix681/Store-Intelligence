@@ -4,10 +4,9 @@ const db = require('./database'); // Shared DB connection
 
 router.get('/', (req, res) => {
     const storeId = req.params.id;
-    const anomalies = []; // Initialize the array before pushing to it
+    const anomalies = [];
 
     try {
-        // 1. High Dwell Time Anomaly
         const highDwell = db.prepare(`
             SELECT visitor_id, dwell_ms, zone_id 
             FROM events 
@@ -15,7 +14,7 @@ router.get('/', (req, res) => {
             ORDER BY dwell_ms DESC LIMIT 1
         `).get(storeId);
 
-        if (highDwell && highDwell.dwell_ms > 300000) { // Over 5 minutes (300k ms)
+        if (highDwell && highDwell.dwell_ms > 300000) {
             anomalies.push({
                 type: "HIGH_DWELL_TIME",
                 severity: "INFO",
@@ -24,8 +23,6 @@ router.get('/', (req, res) => {
             });
         }
 
-        // 2. Dead Zone Anomaly
-        // Checking for zones with 0 traffic in the last 30 minutes
         const thirtyMinsAgo = new Date(Date.now() - 30 * 60000).toISOString();
         const deadZone = db.prepare(`
             SELECT DISTINCT zone_id FROM events WHERE store_id = ? 
@@ -45,7 +42,6 @@ router.get('/', (req, res) => {
             });
         }
 
-        // 3. Billing Queue Spike Anomaly 
         const latestQueueEvent = db.prepare(`
             SELECT metadata FROM events 
             WHERE store_id = ? AND event_type = 'BILLING_QUEUE_JOIN' 
@@ -64,7 +60,6 @@ router.get('/', (req, res) => {
             }
         }
 
-        // 4. Conversion Drop Anomaly 
         const totalWalkIns = db.prepare(`
             SELECT COUNT(DISTINCT visitor_id) as count 
             FROM events 
@@ -78,9 +73,8 @@ router.get('/', (req, res) => {
 
         if (totalWalkIns > 0) {
             const currentConvRate = (totalPurchases / totalWalkIns) * 100;
-            const baselineTarget = 15.0; // Represents the 7-day moving average baseline
+            const baselineTarget = 15.0;
 
-            // Only trigger the anomaly if the actual rate drops below the baseline
             if (currentConvRate < baselineTarget) {
                 const dropAmount = (baselineTarget - currentConvRate).toFixed(1);
                 anomalies.push({

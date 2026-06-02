@@ -17,7 +17,6 @@ const options = {
 const req = http.request(options, (res) => {
     let data = '';
 
-    // 1. Test HTTP Status Code
     try {
         assert.strictEqual(res.statusCode, 200, "API should return a 200 OK status");
         console.log("✅ PASS: HTTP Status is 200");
@@ -31,7 +30,6 @@ const req = http.request(options, (res) => {
     });
 
     res.on('end', () => {
-        // 2. Test JSON Structure and Logic
         try {
             const response = JSON.parse(data);
             

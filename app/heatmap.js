@@ -5,7 +5,6 @@ const db = require('./database');
 router.get('/', (req, res) => {
     const storeId = req.params.id;
     try {
-        // FIX: Check session count for the data_confidence flag
         const sessionCountRes = db.prepare(`SELECT COUNT(DISTINCT visitor_id) as count FROM events WHERE store_id = ? AND is_staff = 0`).get(storeId);
         const sessionCount = sessionCountRes ? sessionCountRes.count : 0;
 
@@ -35,7 +34,6 @@ router.get('/', (req, res) => {
             heatmap_data: normalizedData
         });
     } catch (error) {
-        // FIX: Graceful 503 instead of 500
         res.status(503).json({ error: "Service Unavailable", details: error.message });
     }
 });
