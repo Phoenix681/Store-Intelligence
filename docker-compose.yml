@@ -9,8 +9,4 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=3000
-    # This volume mapping ensures the SQLite database persists on your local machine
-    # even if the container restarts or crashes.
-    volumes:
-      - ./store_intel.db:/usr/src/app/store_intel.db
     restart: unless-stopped

@@ -1,0 +1,58 @@
+{
+  "STORE_1": {
+    "CAM3": {
+      "type": "entry_exit",
+      "zones": {}
+    },
+    "CAM1": {
+      "type": "aisle",
+      "zones": {
+        "SKINCARE_01": {
+          "name": "Skincare Aisle",
+          "polygon": [[50, 50], [400, 50], [400, 500], [50, 500]],
+          "type": "SHELF",
+          "is_revenue_zone": "Yes"
+        }
+      }
+    },
+    "CAM5": {
+      "type": "billing",
+      "zones": {
+        "BILLING_QUEUE_01": {
+          "name": "Checkout Counter",
+          "polygon": [[100, 100], [600, 100], [600, 400], [100, 400]],
+          "type": "BILLING",
+          "is_revenue_zone": "Yes"
+        }
+      }
+    }
+  },
+  "ST1008": {
+    "CAM1": {
+      "type": "entry_exit",
+      "zones": {}
+    },
+    "CAM2": {
+      "type": "aisle",
+      "zones": {
+        "PURPLLE_MUM_1008_Z01": {
+          "name": "Left Shelf",
+          "polygon": [[100, 200], [500, 200], [500, 800], [100, 800]], 
+          "type": "SHELF",
+          "is_revenue_zone": "Yes"
+        }
+      }
+    },
+    "CAM6": {
+      "type": "billing",
+      "zones": {
+        "PURPLLE_MUM_1008_Z_BILLING_01": {
+          "name": "Billing Counter Queue",
+          "polygon": [[300, 150], [700, 150], [700, 600], [300, 600]],
+          "type": "BILLING",
+          "is_revenue_zone": "Yes"
+        }
+      }
+    }
+  }
+}

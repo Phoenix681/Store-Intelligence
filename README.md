@@ -1,26 +1,49 @@
-# Store Intelligence Pipeline (Apex Retail)
+# Store Intelligence Pipeline (Apex Retail) 
 
-An end-to-end edge AI analytics pipeline that tracks offline store footfall, handles complex edge cases (staff exclusion, spatial overlapping), and merges live computer vision data with offline POS transactions to calculate a true conversion funnel.
+An end-to-end Edge AI and Analytics pipeline that transforms raw CCTV video feeds into real-time retail intelligence. Built for multi-store scalability, this system tracks customer journeys, correlates physical behavior with POS transaction data, and detects operational anomalies in real-time.
 
-## 🚀 Quickstart (Under 5 Commands)
-To deploy the Intelligence API and start the tracking pipeline:
+## ✨ Key Features
+* **Live Edge Tracking:** Utilizes YOLOv8 + ByteTrack to monitor customer movement, emitting lightweight JSON state changes (`zone_entered`, `queue_completed`).
+* **Staff Filtering:** Custom OpenCV HSV masking to identify and exclude staff (pink uniforms) from analytics funnels.
+* **Offline POS Integration:** Dynamically correlates physical billing queue joins with offline `.csv` POS transactions using a strict 5-minute time-window join.
+* **Real-time Anomaly Engine:** Automatically detects queue spikes, dead zones, extreme dwell times, and conversion rate drops against a 7-day moving average.
+* **Live React Dashboard:** A real-time command center polling the API every 3 seconds to visualize the customer funnel.
 
-1. `docker compose up --build -d`
-2. `node import_csv.js` *(Loads offline POS transaction data into SQLite)*
-3. `npm run test` *(Optional: Runs integration tests to verify API health)*
-5. Activate environment: `source venv/bin/activate` (Mac/Linux) or `venv\Scripts\activate` (Windows).
-4. `cd pipeline`
-6. `python detect.py`
+## 🚀 Quick Start Guide
 
-## 🎥 Running the Detection Pipeline
-The computer vision tracking (`detect.py`) is decoupled from the Node.js API to simulate an edge-to-cloud architecture. 
-1. Ensure the Dockerized API is running on port `3000`.
-2. Ensure you have the test video in the `pipeline/` directory and **name it `test_video1.mp4`**. *(Note: The spatial polygons are currently calibrated for the CAM 1 perspective. If testing with CAMs 2-5, `calibrate.py` must be run first to remap the store zones).*
-3. Navigate to the pipeline directory (`cd pipeline`) and run `python detect.py`.
-4. The script will initialize YOLOv8, process the frames, evaluate staff uniforms, and POST structured JSON events directly to the `/events/ingest` endpoint.
+### Prerequisites
+* Docker & Docker Compose
+* Python 3.10+
+* Node.js (for the React Dashboard)
 
-## 🏆 Part E: Live Terminal Dashboard (Bonus Claim)
-This submission fulfills the **Part E (+10 Bonus Points)** requirement via a hybrid visual and rich-terminal dashboard. 
-When executing `detect.py`, the system provides:
-1. **Real-time Spatial UI:** An OpenCV window mapping the 2D polygon floor zones, showing active ByteTrack tracking dots, and visually flagging color-masked staff members in real-time.
-2. **Rich Terminal Stream:** A live telemetry feed in the console showing state-machine transitions (e.g., `DWELL`, `ENTER`) alongside immediate API HTTP ingestion confirmations.
+### 1. Boot the Backend (API & Database)
+The system is fully containerized. Booting the Docker container will automatically ingest the POS data and spin up the Express API.
+\`\`\`bash
+docker compose up --build -d
+\`\`\`
+*(The API will be available at `http://localhost:3000`)*
+
+### 2. Start the Live Dashboard
+Open a new terminal window to start the React frontend:
+\`\`\`bash
+cd dashboard
+npm run dev
+\`\`\`
+*(View the dashboard at `http://localhost:5173`)*
+
+### 3. Run the Edge Tracking Node
+Open a third terminal and run the video through the Python tracker. Ensure you use `ST1008` to match the POS data.
+\`\`\`bash
+python pipeline/detect.py --store ST1008 --camera CAM6 --source pipeline/data/store_2/billing_area.mp4
+\`\`\`
+
+Watch the dashboard update in real-time as the tracker processes the video!
+
+## 🧪 Running Tests
+To verify API idempotency, edge cases (Empty Store), and schema compliance:
+\`\`\`bash
+npm run test
+# OR
+node tests/api.test.js
+node tests/test_ingest.js
+\`\`\`

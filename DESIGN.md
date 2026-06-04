@@ -1,25 +1,38 @@
-# Store Intelligence Pipeline: System Design
+# 🏗️ System Design & Architecture
 
-## 1. High-Level Architecture
-The system is built as a lightweight, decoupled event-driven pipeline designed for edge-to-cloud retail analytics. It is separated into two main components:
-1. **Edge Detection Node (Python/Computer Vision):** Processes raw RTSP/Video streams, tracks unique visitors, and emits structured JSON state-change events over HTTP.
-2. **Intelligence API (Node.js/Express):** A containerized centralized backend that ingests high-frequency events, maintains idempotency, and aggregates them with offline POS data to calculate business metrics.
+## System Architecture Overview
+The Apex Retail Intelligence platform is designed around a distributed edge-to-cloud pattern to minimize bandwidth and maximize privacy.
 
-## 2. Data Flow
-1. **Frame Extraction:** Video is decoded and downsampled (1024x576) to reduce compute overhead while maintaining spatial awareness.
-2. **Detection & Tracking:** YOLOv8n combined with ByteTrack performs multi-object tracking (MOT), assigning persistent `track_id`s to visitors.
-3. **Spatial Mapping:** Customer foot-coordinates (bottom-center of bounding boxes) are mapped against predefined 2D floor polygons using `cv2.pointPolygonTest`.
-4. **State Machine & Queue Logic:** A state-cached dictionary tracks `current_zone` and `zone_entry_time`. Transitions trigger `ENTRY`, `REENTRY`, `ZONE_ENTER`, `ZONE_DWELL` (5s threshold), or `EXIT` events. Dedicated logic monitors the `BILLING_QUEUE` zone to emit `BILLING_QUEUE_JOIN` and dynamically calculates real-time `queue_depth` for anomaly detection.
-5. **Ingestion:** Events are POSTed to the Express `/events/ingest` API endpoint.
-6. **Persistence:** Events are saved to a local SQLite database (acting as our time-series/OLAP stand-in).
-7. **Aggregation:** The `/funnel` endpoint merges CV footfall data with offline POS transaction data (`pos_transactions.csv`) using a unified `store_id` to calculate the final conversion rate.
+1. **Edge Node (Python/OpenCV/YOLOv8):** Runs locally at the store. It processes video frames, extracts bounding boxes, identifies staff, and emits lightweight JSON telemetry (NOT video).
+2. **Ingestion API (Node.js/Express):** A stateless REST API that validates incoming events, returning 207 Multi-Status for partial payload successes.
+3. **Database (SQLite):** An asynchronous, multi-table relational database that calculates complex metrics (dwell times, POS joins) on the fly.
+4. **Dashboard (React):** A real-time client polling the analytics endpoints to visualize the funnel.
 
-## 3. Database Schema (SQLite)
-* **`events` table:** `event_id` (PK, UUID), `store_id`, `camera_id`, `visitor_id`, `event_type`, `zone_id`, `dwell_ms`, `timestamp`.
-* **`pos_transactions` table:** `invoice_number` (PK), `store_id`, `order_date`.
+## Database Schema (Multi-Store Optimized)
+To avoid massive table scans and optimize queue logic, the schema is normalized into distinct tables.
 
-## 4. AI-Assisted Decisions
-Throughout this hackathon, AI tools (specifically Gemini) were heavily leveraged to accelerate development and evaluate architectural trade-offs. 
-1. **Docker/Alpine Build Errors:** When attempting to containerize `better-sqlite3`, the AI suggested switching to a heavier Node/Python image. I agreed with this approach because installing native `g++` and `make` tools inside Alpine was causing standard library conflicts, and a slightly larger image size was a worthy trade-off for guaranteed deployment stability (Acceptance Gate priority).
-2. **Staff Exclusion Logic:** I prompted the AI to evaluate whether a Vision-Language Model (VLM) would be best for detecting staff uniforms. The AI correctly highlighted the edge-compute latency this would introduce. Instead, we collaboratively designed a deterministic OpenCV HSV color-masking strategy. I overrode the AI's initial frame-by-frame color check and implemented a cached-state logic to save compute cycles and eliminate UI flickering.
-3. **Database Selection:** The AI suggested using PostgreSQL for scalability. I explicitly rejected this and chose SQLite. For a containerized edge-node processing a single store's video clips, SQLite provides sufficient ACID compliance without the heavy orchestration overhead of a dedicated Postgres container.
+### 1. `events` (General Telemetry)
+Tracks general store movement and demographics.
+* `event_id` (PK, UUID)
+* `store_id`, `camera_id`, `track_id` (Tracking context)
+* `event_type` (`entry`, `zone_entered`, `zone_exited`, `reentry`, `exit`)
+* `zone_id`, `zone_name`, `is_revenue_zone`
+* `is_staff` (Boolean)
+* `confidence` (YOLO detection confidence)
+
+### 2. `queue_events` (Dedicated Funnel Logic)
+Optimized for the POS correlation time-window.
+* `queue_event_id` (PK)
+* `track_id`, `store_id`, `zone_id`
+* `queue_join_ts`, `queue_exit_ts`
+* `wait_seconds`, `queue_position_at_join`
+* `abandoned` (Boolean flag for funnel drop-offs)
+
+### 3. `pos_transactions` (Offline Sales Data)
+* `order_id` (PK)
+* `order_date`, `order_time` (Standardized to YYYY-MM-DD for SQL time math)
+* `total_amount`, `store_id`
+
+## Security & Resilience
+* **Graceful Degradation:** Endpoints like `/metrics` handle missing POS tables or empty databases (0 traffic) without crashing, returning safe `0` values.
+* **Idempotency:** The ingestion endpoint uses `INSERT OR IGNORE` with UUIDs to prevent double-counting if network lag causes the edge node to retry sending an event.

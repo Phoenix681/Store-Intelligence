@@ -19,5 +19,5 @@ COPY . .
 # Expose the port the app runs on
 EXPOSE 3000
 
-# The command to start the API
-CMD ["node", "app/main.js"]
+# Automatically seed the database with POS data, then start the API
+CMD sh -c "node import_csv.js && node app/main.js"

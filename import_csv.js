@@ -1,53 +1,47 @@
 const fs = require('fs');
-const Database = require('better-sqlite3');
+const csv = require('csv-parser');
+const db = require('./app/database');
 
-// Connect to your local database
-const db = new Database('./store_intel.db');
+console.log("⏳ Starting POS data ingestion with ISO timestamp conversion...");
 
-console.log("⏳ Initializing database tables...");
+const results = [];
 
-db.exec(`
-  CREATE TABLE IF NOT EXISTS pos_transactions (
-    invoice_number TEXT,
-    store_id TEXT,
-    order_date TEXT
-  )
-`);
+fs.createReadStream('pos_transactions.csv')
+  .pipe(csv())
+  .on('data', (row) => results.push(row))
+  .on('end', () => {
+      db.serialize(() => {
+          db.run('BEGIN TRANSACTION');
+          
+          const stmt = db.prepare(`
+              INSERT OR IGNORE INTO pos_transactions 
+              (order_id, order_date, order_time, store_id, product_id, brand_name, total_amount)
+              VALUES (?, ?, ?, ?, ?, ?, ?)
+          `);
 
-const insertStmt = db.prepare('INSERT INTO pos_transactions (invoice_number, store_id, order_date) VALUES (?, ?, ?)');
+          for (const row of results) {
+              // Convert DD-MM-YYYY to YYYY-MM-DD for accurate SQLite time math
+              const parts = row.order_date.split('-');
+              let formattedDate = row.order_date;
+              if (parts.length === 3) {
+                  formattedDate = `${parts[2]}-${parts[1]}-${parts[0]}`; 
+              }
 
-console.log("⏳ Reading pos_transactions.csv...");
-try {
-    const csvData = fs.readFileSync('pos_transactions.csv', 'utf-8');
-    const rows = csvData.split('\n');
+              stmt.run([
+                  row.order_id,
+                  formattedDate,
+                  row.order_time,
+                  row.store_id,
+                  row.product_id,
+                  row.brand_name,
+                  parseFloat(row.total_amount)
+              ]);
+          }
 
-    // Find the exact column numbers dynamically based on the headers
-    const headers = rows[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
-    const invoiceIdx = headers.indexOf('invoice_number');
-    const storeIdx = headers.indexOf('store_id');
-    const dateIdx = headers.indexOf('order_date');
-
-    let count = 0;
-
-    const insertMany = db.transaction((rows) => {
-        for (let i = 1; i < rows.length; i++) {
-            if (!rows[i].trim()) continue; 
-            
-            const cols = rows[i].split(',').map(c => c.trim().replace(/^"|"$/g, ''));
-            const invoice = cols[invoiceIdx];
-            const store = cols[storeIdx];
-            const date = cols[dateIdx];
-
-            if (invoice && store) {
-                insertStmt.run(invoice, store, date);
-                count++;
-            }
-        }
-    });
-
-    insertMany(rows);
-    console.log(`✅ BOOM! Successfully imported ${count} rows into the pos_transactions table!`);
-
-} catch (err) {
-    console.error("❌ ERROR: Could not read pos_transactions.csv. Is it in the root folder?", err.message);
-}
+          stmt.finalize();
+          db.run('COMMIT', (err) => {
+              if (err) console.error("❌ Error committing POS data:", err.message);
+              else console.log(`✅ Successfully imported ${results.length} POS transactions with corrected timestamps.`);
+          });
+      });
+  });

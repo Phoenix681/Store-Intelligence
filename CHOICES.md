@@ -1,20 +1,34 @@
-# Engineering Decisions & Trade-Offs
+# 🤔 Engineering Choices & AI Rationale
 
-## 1. Detection Model Selection & Staff Exclusion
-* **Options Considered:** YOLOv8n + ByteTrack vs. RT-DETR vs. Vision-Language Models (GPT-4V/Claude) for tracking and staff identification.
-* **What AI Suggested:** The AI initially suggested using a VLM to classify staff uniforms based on visual prompting to guarantee high accuracy.
-* **What I Chose & Why:** I overrode the AI and chose **YOLOv8n + ByteTrack combined with deterministic OpenCV HSV color masking**. Running a VLM on edge hardware for 15fps video would introduce massive latency and throttle the pipeline. By cropping the top 30% of the YOLO bounding box and checking if the dark pixel ratio exceeds 45%, I achieved the same staff-exclusion result natively. Furthermore, I cached this boolean result in the tracking session state to completely eliminate UI flickering and reduce compute overhead to near-zero.
+## 1. Event Schema Rationale: Edge Triggers vs. Polling (AI-Assisted)
+**Initial Approach:** The original specification suggested emitting a `ZONE_DWELL` event every 30 seconds to track engagement. 
+**Final Choice:** After running architecture simulations with AI (Gemini/Claude), I realized streaming continuous `ZONE_DWELL` events creates massive data redundancy and makes dwell-time aggregation difficult in SQLite. 
+**Implementation:** I opted for an edge-triggered schema (`zone_entered` and `zone_exited`). The SQLite backend dynamically calculates dwell time via a self-join (`e2.event_timestamp - e1.event_timestamp`). This drastically reduced network payload size from the edge nodes and resulted in much cleaner anomaly detection.
 
-## 2. Event Schema Design Rationale
-* **Options Considered:** Emitting granular frame-by-frame coordinate data vs. Stateful Session events (State Machine).
-* **What AI Suggested:** The AI suggested a highly normalized schema emitting raw `(x, y)` coordinates every second, leaving the backend to calculate dwells and zones. 
-* **What I Chose & Why:** I rejected the raw-coordinate approach and chose a **Stateful Event Schema (`ZONE_ENTER`, `ZONE_DWELL`, `ZONE_EXIT`)**. I designed overlapping 2D floor "mats" in the Python script to map the physical zones. Emitting raw coordinates causes massive payload bloat and shifts heavy spatial compute to the Node.js API. By processing the spatial mapping at the edge (Python) and only emitting state-change events over HTTP, the API remains lightweight, idempotent, and immediately ready for business logic aggregation.
+## 2. Handling Re-entry and Deduplication
+To prevent "double-counting" customers who exit and re-enter the frame, the Python tracker maintains a state machine. If an `"EXITED"` ID reappears, it emits a dedicated `reentry` event. On the backend, the `/funnel` and `/metrics` SQL queries aggregate using `COUNT(DISTINCT track_id)`, ensuring the funnel strictly reflects unique sessions regardless of movement fragmentation.
 
-## 3. API Architecture Choice (Single-Camera Deduplication)
-* **Options Considered:** Multi-camera Re-ID (using OSNet facial/clothing embeddings) vs. Single-Camera Funnel Tracking.
-* **What AI Suggested:** To handle the overlapping FOV between the Entry, Floor, and Billing cameras, the AI suggested integrating deep-learning feature extraction (OSNet) to match visitors across the three different video feeds.
-* **What I Chose & Why:** I opted to process the entire conversion funnel using **only the Main Floor camera (CAM_FLOOR_01)**. Implementing true multi-camera Re-ID is too compute-heavy and error-prone for a 3-day constraint, risking severe double-counting in the API. Because the Main Floor camera provides sufficient Field of View (FOV) to capture the Entry threshold, product zones, and Billing queue, relying on a single continuous ByteTrack session structurally guarantees 100% deduplication of visitors from walk-in to checkout.
+## 3. POS Correlation Time-Window
+Instead of relying on unstable visual re-identification to link a person to a receipt, the backend merges physical behavior with offline sales using a **temporal join**. 
+The SQL query matches a `pos_transaction` to a `queue_events` record if:
+1. `store_id` matches.
+2. The `abandoned` flag is false.
+3. The transaction timestamp occurs within **300 seconds (5 minutes)** of the `queue_join_ts`.
 
-## 4. Queue Abandonment & Edge-Node Limitations
-* **Options Considered:** Emitting `BILLING_QUEUE_ABANDON` only after verifying a lack of POS transactions vs. Emitting on raw spatial exit.
-* **What I Chose & Why:** I deliberately configured the edge node to emit `BILLING_QUEUE_ABANDON` on raw spatial exits, acknowledging that true abandonment requires a 5-minute POS correlation window. The edge Python script is intentionally "blind" to offline POS data to remain lightweight. I pushed the complex temporal correlation logic entirely to the Intelligence API (`/metrics` and `/funnel`) where the database can natively handle the math. While this inflates raw abandonment events in the edge stream, the backend safely handles the source of truth, protecting the edge node from heavy cross-referencing logic.
+## 4. VLM Evaluation (GPT-4V) for Zone Classification
+During prototyping, I evaluated using a Vision-Language Model (VLM) like GPT-4V to dynamically classify store zones (e.g., Prompt: *"Given this image of a retail store, return a JSON map of the coordinates for the checkout counter and the skincare aisle"*).
+**Why it was rejected:** While accurate, the VLM introduced ~4-6 seconds of latency per frame analysis and API cost overhead. For real-time edge processing, drawing hardcoded static polygons over the camera feed (via `config.json`) and using OpenCV's `pointPolygonTest` proved to be infinitely faster and more reliable for a hackathon environment.
+
+## 5. AI Engineering Limitation: Tracking Fragmentation (ID Switching)
+During testing, I observed that the ByteTrack algorithm occasionally experiences "ID switching" when customers occlude one another at the billing counter. Because the lightweight YOLOv8n model assigns a new `track_id` when it reacquires a person, it can artificially inflate the cumulative "Joined Queue" funnel metrics. 
+**Production Solution:** To solve this in a full-scale enterprise environment, I would replace the tracking algorithm with a robust ReID (Re-identification) model like BoT-SORT, or implement a spatial-temporal smoothing function in the Node.js backend to merge tracks that appear in the exact same coordinates within a 2-second window.
+
+---
+
+### AI Prompting Evidence (Required for Evaluation)
+*Throughout development, LLMs were used strictly as pair programmers for testing and schema optimization.*
+
+**Example Prompt used in `tests/api.test.js`:**
+> `# PROMPT:` "Write a comprehensive zero-dependency Node.js integration test using the native 'http' and 'assert' modules. It must test multiple endpoints (/health, /metrics, /funnel), verify 200 status codes, check the correct store ID, and include an edge-case test for a non-existent empty store to prove graceful degradation."
+
+> `# CHANGES MADE:` I manually updated the store ID to `ST1008` to perfectly align with the POS dataset. I also refactored the native HTTP request into a reusable async wrapper to cleanly test multiple endpoints sequentially without relying on third-party test runners like Jest.

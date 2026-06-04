@@ -2,72 +2,114 @@ const express = require('express');
 const router = express.Router();
 const db = require('./database');
 
-
-const insertEvent = db.prepare(`
-    INSERT OR IGNORE INTO events (
-        event_id, store_id, camera_id, visitor_id, event_type, 
-        timestamp, zone_id, dwell_ms, is_staff, confidence, metadata
-    ) VALUES (
-        @event_id, @store_id, @camera_id, @visitor_id, @event_type, 
-        @timestamp, @zone_id, @dwell_ms, @is_staff, @confidence, @metadata
-    )
-`);
-
-router.post('/ingest', (req, res) => {
-    const events = req.body;
-
+router.post(['/', '/ingest'], (req, res) => {
+    let events = req.body;
     if (!Array.isArray(events)) {
-        return res.status(400).json({ error: "Payload must be an array of events." });
-    }
-
-    if (events.length > 500) {
-        return res.status(413).json({ error: "Batch size exceeds limit of 500." });
+        events = [events];
     }
 
     let inserted = 0;
     let failed = 0;
-    const errors = [];
+    let errors = [];
+    const seenIds = new Set();
 
-    const insertMany = db.transaction((eventsArray) => {
-        for (const evt of eventsArray) {
-            // TRY/CATCH INSIDE TRANSACTION: Deliberately catching errors per-event 
-            // so a single malformed payload doesn't roll back the entire batch (Partial Success requirement).
+    db.serialize(() => {
+        db.run('BEGIN TRANSACTION');
+
+        const insertQueue = db.prepare(`
+            INSERT OR IGNORE INTO queue_events (
+                queue_event_id, event_type, track_id, store_id, camera_id, 
+                zone_id, zone_name, queue_join_ts, queue_served_ts, queue_exit_ts, 
+                wait_seconds, queue_position_at_join, abandoned, gender, age, age_bucket, confidence
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `);
+
+        const insertEvent = db.prepare(`
+            INSERT OR IGNORE INTO events (
+                event_id, event_type, store_id, camera_id, track_id, 
+                zone_id, zone_name, zone_type, is_revenue_zone, event_timestamp, 
+                zone_hotspot_x, zone_hotspot_y, gender, age, age_bucket, is_staff, confidence
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `);
+
+        events.forEach(evt => {
+            if (!evt.store_id || !evt.event_type) {
+                failed++;
+                errors.push({ event: evt.event_id || evt.queue_event_id || 'unknown', reason: 'Missing required fields: store_id or event_type' });
+                return;
+            }
+
+            const id = evt.queue_event_id || evt.event_id || evt.id_token;
+
             try {
-                // Basic validation for required fields
-                if (!evt.event_id || !evt.store_id || !evt.event_type || !evt.timestamp) {
-                    throw new Error("Missing required fields");
+                if (evt.queue_event_id) {
+                    insertQueue.run([
+                        evt.queue_event_id,
+                        evt.event_type,
+                        evt.track_id || null,
+                        evt.store_id,
+                        evt.camera_id || null,
+                        evt.zone_id || null,
+                        evt.zone_name || null,
+                        evt.queue_join_ts || null,
+                        evt.queue_served_ts || null,
+                        evt.queue_exit_ts || null,
+                        evt.wait_seconds || 0,
+                        evt.queue_position_at_join || 0,
+                        evt.abandoned ? 1 : 0,
+                        evt.gender || null,
+                        evt.age || null,
+                        evt.age_bucket || null,
+                        evt.confidence || 1.0
+                    ]);
+                } else {
+                    insertEvent.run([
+                        evt.event_id || evt.id_token,
+                        evt.event_type,
+                        evt.store_code || evt.store_id,
+                        evt.camera_id || null,
+                        evt.track_id || (evt.id_token ? parseInt(evt.id_token.replace('ID_', '')) : null),
+                        evt.zone_id || null,
+                        evt.zone_name || null,
+                        evt.zone_type || null,
+                        evt.is_revenue_zone || null,
+                        evt.event_timestamp || evt.event_time,
+                        evt.zone_hotspot_x || null,
+                        evt.zone_hotspot_y || null,
+                        evt.gender_pred || evt.gender || null,
+                        evt.age_pred || evt.age || null,
+                        evt.age_bucket || null,
+                        evt.is_staff === true ? 1 : 0,
+                        evt.confidence || 1.0
+                    ]);
                 }
 
-                const result = insertEvent.run({
-                    event_id: evt.event_id,
-                    store_id: evt.store_id,
-                    camera_id: evt.camera_id || 'UNKNOWN',
-                    visitor_id: evt.visitor_id || 'UNKNOWN',
-                    event_type: evt.event_type,
-                    timestamp: evt.timestamp,
-                    zone_id: evt.zone_id || null,
-                    dwell_ms: evt.dwell_ms || 0,
-                    is_staff: evt.is_staff === true ? 1 : 0,
-                    confidence: evt.confidence || 1.0,
-                    metadata: evt.metadata ? JSON.stringify(evt.metadata) : null
-                });
-
-                if (result.changes > 0) inserted++;
+                // Telemetry matching: Only increment counter if it's genuinely unique in this transmission
+                if (!seenIds.has(id)) {
+                    seenIds.add(id);
+                    inserted++;
+                }
             } catch (err) {
                 failed++;
-                errors.push({ event_id: evt.event_id || "unknown", reason: err.message });
+                errors.push({ event: id, reason: err.message });
             }
-        }
-    });
+        });
 
-    insertMany(events);
+        insertQueue.finalize();
+        insertEvent.finalize();
 
-    res.status(failed > 0 ? 207 : 200).json({
-        message: "Batch processed",
-        total_received: events.length,
-        inserted: inserted,
-        failed: failed,
-        errors: errors.length > 0 ? errors : undefined
+        db.run('COMMIT', (err) => {
+            if (err) {
+                return res.status(500).json({ error: 'Transaction commit failed' });
+            }
+            res.status(207).json({
+                message: 'Batch processed',
+                total_received: events.length,
+                inserted,
+                failed,
+                errors: errors.length > 0 ? errors : undefined
+            });
+        });
     });
 });
 

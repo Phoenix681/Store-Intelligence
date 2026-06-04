@@ -10,11 +10,13 @@ const metricsRouter = require('./metrics');
 const funnelRouter = require('./funnel');
 const heatmapRouter = require('./heatmap');
 const anomaliesRouter = require('./anomalies');
+const cors = require('cors');
+
+app.use(cors());
 
 // Middleware to parse JSON
 app.use(express.json({ limit: '10mb' }));
 
-// --- STRUCTURED LOGGING MIDDLEWARE ---
 app.use((req, res, next) => {
     const start = Date.now();
     const traceId = crypto.randomUUID();
@@ -54,19 +56,29 @@ app.use('/stores/:id/anomalies', anomaliesRouter);
 
 // Basic Health Check
 app.get('/health', (req, res) => {
-    try {
-        // Find the most recent event PER STORE
-        const lastEvents = db.prepare(`
-            SELECT store_id, MAX(timestamp) as last_event 
-            FROM events 
-            GROUP BY store_id
-        `).all();
-        
+    const query = `
+        SELECT store_id, MAX(event_timestamp) as last_event 
+        FROM events 
+        GROUP BY store_id
+    `;
+
+    db.all(query, [], (err, lastEvents) => {
+        // Graceful degradation: No raw stack traces 
+        if (err) {
+            return res.status(503).json({ 
+                status: "ERROR", 
+                message: "Database momentarily unavailable",
+                error_code: "DB_QUERY_FAILED"
+            });
+        }
+
         let status = "OK";
         const now = new Date().getTime();
 
         // Check if ANY store has a stale feed (no events in 10 minutes)
         for (const store of lastEvents) {
+            if (!store.last_event) continue; // Skip if store has no events yet
+            
             const eventTime = new Date(store.last_event).getTime();
             if ((now - eventTime) > 600000) {
                 status = "STALE_FEED";
@@ -79,10 +91,22 @@ app.get('/health', (req, res) => {
             last_events_per_store: lastEvents,
             uptime_seconds: process.uptime()
         });
-    } catch (err) {
-        res.status(503).json({ status: "ERROR", details: err.message });
-    }
+    });
 });
+
+app.post('/reset', (req, res) => {
+    const db = require('./database');
+    db.serialize(() => {
+        db.run('DELETE FROM events');
+        db.run('DELETE FROM queue_events', (err) => {
+            if (err) {
+                res.status(500).json({ error: "Failed to clear data" });
+            } else {
+                res.json({ message: "Live camera data wiped successfully! Dashboard is now at 0." });
+            }
+        });
+    });
+}); 
 
 // Start Server
 if (process.env.NODE_ENV !== 'test') {

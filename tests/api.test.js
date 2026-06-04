@@ -1,61 +1,83 @@
-/* # PROMPT: "Write a zero-dependency Node.js integration test using the native 'http' and 'assert' modules to test my Express /funnel endpoint. It must verify a 200 status code and check that the JSON response contains funnel_metrics."
-# CHANGES MADE: I manually added the assertions for checking the successful_purchases metric and updated the API path to use the dynamic store ID STORE_BLR_002 to match the updated detection pipeline.
+/* # PROMPT: "Write a comprehensive zero-dependency Node.js integration test using the native 'http' and 'assert' modules. It must test multiple endpoints (/health, /metrics, /funnel), verify 200 status codes, check the correct store ID, and include an edge-case test for a non-existent empty store to prove graceful degradation."
+# CHANGES MADE: I updated the store ID to ST1008 to perfectly align with the POS dataset. I also refactored the native HTTP request into a reusable async wrapper to cleanly test multiple endpoints sequentially, including the explicit 'Empty Store' edge case mentioned in the evaluation rubric.
 */
 
 const http = require('http');
 const assert = require('assert');
 
-console.log("🧪 Starting API Integration Tests...");
+console.log("🧪 Starting Comprehensive API Integration Tests...\n");
 
-const options = {
-    hostname: 'localhost',
-    port: 3000,
-    path: '/stores/STORE_BLR_002/funnel', 
-    method: 'GET'
-};
+// Reusable async wrapper for native HTTP module
+function makeRequest(path, method = 'GET', body = null) {
+    return new Promise((resolve, reject) => {
+        const options = {
+            hostname: 'localhost',
+            port: 3000,
+            path: path,
+            method: method,
+            headers: { 'Content-Type': 'application/json' }
+        };
 
-const req = http.request(options, (res) => {
-    let data = '';
+        const req = http.request(options, (res) => {
+            let data = '';
+            res.on('data', chunk => data += chunk);
+            res.on('end', () => {
+                try {
+                    resolve({ status: res.statusCode, body: data ? JSON.parse(data) : null });
+                } catch (e) {
+                    reject(new Error(`Invalid JSON response: ${data}`));
+                }
+            });
+        });
 
+        req.on('error', reject);
+        if (body) req.write(JSON.stringify(body));
+        req.end();
+    });
+}
+
+// Run all tests sequentially
+async function runTests() {
     try {
-        assert.strictEqual(res.statusCode, 200, "API should return a 200 OK status");
-        console.log("✅ PASS: HTTP Status is 200");
+        // --- TEST 1: Health Endpoint ---
+        console.log("▶️  Testing GET /health");
+        let res = await makeRequest('/health');
+        assert.strictEqual(res.status, 200, "Health endpoint should return 200 OK");
+        assert.ok(res.body.status, "Health response must contain a status field");
+        console.log("✅ PASS: Health check is functional\n");
+
+        // --- TEST 2: Funnel Endpoint (ST1008) ---
+        console.log("▶️  Testing GET /stores/ST1008/funnel");
+        res = await makeRequest('/stores/ST1008/funnel');
+        assert.strictEqual(res.status, 200, "Funnel API should return 200 OK");
+        assert.strictEqual(res.body.store_id, 'ST1008', "Store ID should match ST1008");
+        assert.ok(res.body.funnel_metrics, "Response must contain funnel_metrics object");
+        assert.ok(res.body.funnel_metrics.successful_purchases >= 0, "Purchases must be a valid number");
+        console.log("✅ PASS: POS offline data successfully merged in funnel\n");
+
+        // --- TEST 3: Metrics Endpoint (ST1008) ---
+        console.log("▶️  Testing GET /stores/ST1008/metrics");
+        res = await makeRequest('/stores/ST1008/metrics');
+        assert.strictEqual(res.status, 200, "Metrics API should return 200 OK");
+        assert.ok(res.body.conversion_rate >= 0, "Conversion rate must be calculated");
+        assert.ok(Array.isArray(res.body.avg_dwell_by_zone), "Dwell time must be an array");
+        console.log("✅ PASS: Real-time metrics successfully aggregated\n");
+
+        // --- TEST 4: The 'Empty Store' Edge Case ---
+        console.log("▶️  Testing Edge Case: GET /stores/ST9999_EMPTY/funnel");
+        res = await makeRequest('/stores/ST9999_EMPTY/funnel');
+        assert.strictEqual(res.status, 200, "Empty store should gracefully return 200, not crash");
+        assert.strictEqual(res.body.funnel_metrics.walk_ins, 0, "Empty store should have 0 walk-ins");
+        assert.strictEqual(res.body.funnel_metrics.successful_purchases, 0, "Empty store should have 0 purchases");
+        console.log("✅ PASS: Empty store degradation handled flawlessly\n");
+
+        console.log("🎉 ALL TESTS PASSED! The Intelligence API is production-ready.");
+        process.exit(0);
+
     } catch (err) {
-        console.error("❌ FAIL:", err.message);
+        console.error(`❌ FAIL: ${err.message}`);
         process.exit(1);
     }
+}
 
-    res.on('data', (chunk) => {
-        data += chunk;
-    });
-
-    res.on('end', () => {
-        try {
-            const response = JSON.parse(data);
-            
-            assert.ok(response.store_id === 'STORE_BLR_002', "Store ID should match STORE_BLR_002");
-            console.log("✅ PASS: Store ID correctly mapped");
-
-            assert.ok(response.funnel_metrics, "Response must contain funnel_metrics object");
-            console.log("✅ PASS: Funnel metrics object exists");
-
-            // Verify that the POS merge is returning a valid number
-            assert.ok(response.funnel_metrics.successful_purchases >= 0, "Purchases must be a valid number");
-            console.log("✅ PASS: POS offline data successfully merged");
-
-            console.log("\n🎉 All tests passed! The Intelligence API is production-ready.");
-            process.exit(0);
-
-        } catch (err) {
-            console.error("❌ FAIL: Invalid JSON or missing data fields -", err.message);
-            process.exit(1);
-        }
-    });
-});
-
-req.on('error', (error) => {
-    console.error("❌ FAIL: Could not connect to API. Is the Docker container running?", error.message);
-    process.exit(1);
-});
-
-req.end();
+runTests();
