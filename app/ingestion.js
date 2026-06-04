@@ -102,7 +102,7 @@ router.post(['/', '/ingest'], (req, res) => {
             if (err) {
                 return res.status(500).json({ error: 'Transaction commit failed' });
             }
-            res.status(207).json({
+            res.status(failed > 0 ? 207 : 200).json({
                 message: 'Batch processed',
                 total_received: events.length,
                 inserted,
